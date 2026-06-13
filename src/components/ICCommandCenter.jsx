@@ -72,8 +72,8 @@ export default function ICCommandCenter({
       {
         assessment_id: assessment.id,
         action_type: "UPDATE_STATUS",
-        old_value: { status: assessment.status },
-        new_value: { status: newStatus },
+        old_value: assessment.status,
+        new_value: newStatus,
         changed_by: currentUser.id,
         details: note || "IC Head Review",
       },

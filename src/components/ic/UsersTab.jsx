@@ -42,12 +42,18 @@ export default function UsersTab({
 
   const checkUsernameDuplicate = async (username, excludeUserId) => {
     if (!username || username.trim() === "") return false;
-    const { data } = await supabase
+
+    let query = supabase
       .from("system_users")
       .select("id")
-      .eq("username", username.trim())
-      .neq("id", excludeUserId)
-      .maybeSingle();
+      .eq("username", username.trim());
+
+    // ✅ ใส่ .neq เฉพาะตอนมี excludeUserId (ตอนแก้ไข user เดิม)
+    if (excludeUserId) {
+      query = query.neq("id", excludeUserId);
+    }
+
+    const { data } = await query.maybeSingle();
     return !!data;
   };
 

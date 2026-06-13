@@ -271,8 +271,8 @@ export default function WardNursePane({
       {
         assessment_id: id,
         action_type: "CANCEL_CASE",
-        old_value: { status: "Pending" },
-        new_value: { status: "Cancelled" },
+        old_value: "Pending",
+        new_value: "Cancelled",
         changed_by: currentUser.id,
         details: "พยาบาลขอดึงเรื่องกลับ",
       },
