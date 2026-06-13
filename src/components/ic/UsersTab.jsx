@@ -501,22 +501,99 @@ export default function UsersTab({
     showToast("success", `✅ เพิ่มผู้ใช้ IC "${newIcFullName}" สำเร็จ`);
     fetchGlobalData();
   };
-
+  // 🆕 Soft Delete สำหรับ IC Users — ย้ายไปถังขยะแทนลบจริง
   const handleDeleteIcUser = async (id, fullName, username) => {
     if (username === "ic_head") {
       showToast("error", "❌ ไม่สามารถลบบัญชี IC Head ต้นแบบได้");
       return;
     }
+
     if (
       !window.confirm(
-        `⚠️ ยืนยันการลบผู้ใช้ IC?\n\n${fullName}\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!`,
+        `⚠️ ย้าย "${fullName}" ไปถังขยะ?\n\n` +
+          `🔒 บัญชีจะถูกระงับ (ไม่สามารถล็อกอินได้)\n` +
+          `💡 สามารถกู้คืนได้จากถังขยะ\n\n` +
+          `ยืนยันการดำเนินการ?`,
       )
     )
       return;
+
+    const { error } = await supabase
+      .from("system_users")
+      .update({
+        is_suspended: true,
+        suspended_at: new Date().toISOString(),
+        suspension_reason: `ถูกลบโดย ${currentUser.full_name} เมื่อ ${new Date().toLocaleString("th-TH")}`,
+      })
+      .eq("id", id);
+
+    if (error) {
+      showToast("error", `ลบไม่สำเร็จ: ${error.message}`);
+    } else {
+      showToast(
+        "success",
+        `✅ ย้าย "${fullName}" ไปถังขยะ — กู้คืนได้จากถังขยะ`,
+      );
+      fetchGlobalData();
+    }
+  };
+
+  // 🆕 กู้คืน IC User จากถังขยะ
+  const handleRestoreIcUser = async (id, fullName) => {
+    if (
+      !window.confirm(
+        `🔄 กู้คืน "${fullName}"?\n\n` +
+          `✅ บัญชีจะถูกปลดระงับ\n` +
+          `✅ สามารถล็อกอินได้ตามปกติ`,
+      )
+    )
+      return;
+
+    const { error } = await supabase
+      .from("system_users")
+      .update({
+        is_suspended: false,
+        suspended_at: null,
+        suspension_reason: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      showToast("error", `กู้คืนไม่สำเร็จ: ${error.message}`);
+    } else {
+      showToast("success", `🔄 กู้คืน "${fullName}" สำเร็จ`);
+      fetchGlobalData();
+    }
+  };
+
+  // 🆕 ลบถาวร (Hard Delete) — ใช้เมื่อแน่ใจแล้ว
+  const handlePermanentDeleteIcUser = async (id, fullName, username) => {
+    if (username === "ic_head") {
+      showToast("error", "❌ ไม่สามารถลบบัญชี IC Head ต้นแบบได้");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `⚠️⚠️⚠️ ลบถาวร "${fullName}"?\n\n` +
+          `🚨 คำเตือน: การกระทำนี้ไม่สามารถย้อนกลับได้!\n` +
+          `💡 แนะนำ: ใช้ Soft Delete แทน (กู้คืนได้)`,
+      )
+    )
+      return;
+
+    // Double confirm
+    if (
+      !window.confirm(`พิมพ์ชื่อผู้ใช้เพื่อยืนยันการลบถาวร:\n\n"${username}"`)
+    )
+      return;
+
     const { error } = await supabase.from("system_users").delete().eq("id", id);
-    if (error) showToast("error", `ลบไม่สำเร็จ: ${error.message}`);
-    else {
-      showToast("success", `✅ ลบ ${fullName} สำเร็จ`);
+
+    if (error) {
+      showToast("error", `ลบไม่สำเร็จ: ${error.message}`);
+    } else {
+      showToast("success", `🗑️ ลบ "${fullName}" ถาวรสำเร็จ`);
       fetchGlobalData();
     }
   };
