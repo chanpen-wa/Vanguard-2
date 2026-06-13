@@ -625,7 +625,9 @@ export default function AuditModal({
                                   : "text-slate-600"
                             }
                           >
-                            {log.new_value}
+                            {typeof log.new_value === "object"
+                              ? log.new_value.status
+                              : log.new_value}
                           </span>
                         </h5>
                         <span className="text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded">
