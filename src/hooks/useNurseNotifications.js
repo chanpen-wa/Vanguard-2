@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { playNotificationSound } from '../utils/playNotificationSound';
 
+/**
+ * 🔔 Vanguard IC — Nurse Notification System
+ */
 export function useNurseNotifications(currentUser) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -10,7 +14,6 @@ export function useNurseNotifications(currentUser) {
     if (currentUser?.role !== 'NURSE' || !currentUser?.ward_id) return;
 
     const channelName = `nurse-notif-${Date.now()}`;
-
     const channel = supabase
       .channel(channelName)
       .on(
@@ -49,27 +52,22 @@ export function useNurseNotifications(currentUser) {
           setUnreadCount(prev => prev + 1);
           playNotificationSound();
           
-          // ✅ Browser Notification — tag ไม่ซ้ำ (เด้งทุกครั้ง)
           try {
             new Notification(`Vanguard IC — ${titleText}`, {
               body: `${updated.patient_name} (HN: ${updated.hn}) • ${updated.device_type}`,
               icon: '/favicon.ico',
-              tag: `nurse-${updated.id}-${Date.now()}`  // ✅ ไม่ซ้ำ = เด้งทุกครั้ง
+              tag: `nurse-${updated.id}-${Date.now()}`
             });
           } catch (err) {}
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
   const markAsRead = useCallback((id) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     setUnreadCount(prev => Math.max(0, prev - 1));
   }, []);
 
@@ -84,30 +82,5 @@ export function useNurseNotifications(currentUser) {
     setShowPanel(false);
   }, []);
 
-  return {
-    notifications,
-    unreadCount,
-    showPanel,
-    setShowPanel,
-    markAsRead,
-    markAllAsRead,
-    clearAll
-  };
-}
-
-// ✅ เสียง
-function playNotificationSound() {
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (error) {}
+  return { notifications, unreadCount, showPanel, setShowPanel, markAsRead, markAllAsRead, clearAll };
 }

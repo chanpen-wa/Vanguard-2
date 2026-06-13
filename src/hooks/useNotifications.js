@@ -1,77 +1,55 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { playNotificationSound } from '../utils/playNotificationSound';
 
 /**
- * 🔔 Vanguard IC — IC Head Notification System
- * 
- * แจ้งเตือน IC Head เมื่อ:
- * - มีเคสใหม่ (INSERT)
- * - Nurse ดึงเรื่องกลับ (UPDATE → Cancelled)
- * - Device Duration Alerts
- * - Outbreak Warning
+ * 🔔 Vanguard IC — Notification System (IC_HEAD, ICWN, ICN)
  */
 export function useNotifications(currentUser) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
 
-  // ========================================
+  const isIC = ['IC_HEAD', 'ICWN', 'ICN'].includes(currentUser?.role);
+
   // 1. เคสใหม่ (INSERT)
-  // ========================================
   useEffect(() => {
-    if (currentUser?.role !== 'IC_HEAD') return;
+    if (!isIC) return;
 
     const channelName = `notif-insert-${Date.now()}`;
-    console.warn('🔔 IC: Subscribing to INSERT');
-
     const insertChannel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'assessments' },
         (payload) => {
-          console.warn('🔔 IC: INSERT DETECTED:', payload.new?.patient_name);
-          
           const newCase = payload.new;
-          
           const notification = {
             id: `new-case-${newCase.id}-${Date.now()}`,
             type: 'NEW_CASE',
             title: '🔔 มีเคสใหม่เข้ามา',
             message: `${newCase.patient_name} (HN: ${newCase.hn})`,
-            detail: `${newCase.device_type} • ${newCase.ward_name || 'ไม่ระบุวอร์ด'}`,
+            detail: `${newCase.device_type} • ${newCase.ward_name || newCase.detailed_analysis_json?.ward_name || 'ไม่ระบุวอร์ด'}`,
             caseId: newCase.id,
             timestamp: new Date().toISOString(),
             read: false
           };
-          
           setNotifications(prev => [notification, ...prev].slice(0, 50));
           setUnreadCount(prev => prev + 1);
           playNotificationSound();
-          showBrowserNotification(
-            '🔔 Vanguard IC — มีเคสใหม่',
-            `${newCase.patient_name} • ${newCase.device_type}`
-          );
+          showBrowserNotification('🔔 Vanguard IC — มีเคสใหม่', `${newCase.patient_name} • ${newCase.device_type}`);
         }
       )
-      .subscribe((status) => {
-        console.warn('🔔 IC INSERT status:', status);
-      });
+      .subscribe();
 
-    return () => {
-      supabase.removeChannel(insertChannel);
-    };
+    return () => { supabase.removeChannel(insertChannel); };
   }, [currentUser]);
 
-  // ========================================
   // 2. Nurse ดึงเรื่องกลับ (UPDATE → Cancelled)
-  // ========================================
   useEffect(() => {
-    if (currentUser?.role !== 'IC_HEAD') return;
+    if (!isIC) return;
 
     const channelName = `notif-cancel-${Date.now()}`;
-    console.warn('↩️ IC: Subscribing to UPDATE (Cancelled only)');
-
     const updateChannel = supabase
       .channel(channelName)
       .on(
@@ -80,11 +58,7 @@ export function useNotifications(currentUser) {
         (payload) => {
           const updatedCase = payload.new;
           const oldCase = payload.old;
-          
-          // ✅ เฉพาะเมื่อ Nurse ดึงเรื่องกลับ (Cancelled)
           if (oldCase.status !== 'Cancelled' && updatedCase.status === 'Cancelled') {
-            console.warn('↩️ IC: CASE CANCELLED:', updatedCase.patient_name);
-            
             const notification = {
               id: `cancel-${updatedCase.id}-${Date.now()}`,
               type: 'CANCELLED',
@@ -95,34 +69,23 @@ export function useNotifications(currentUser) {
               timestamp: new Date().toISOString(),
               read: false
             };
-            
             setNotifications(prev => [notification, ...prev].slice(0, 50));
             setUnreadCount(prev => prev + 1);
           }
         }
       )
-      .subscribe((status) => {
-        console.warn('↩️ IC UPDATE status:', status);
-      });
+      .subscribe();
 
-    return () => {
-      supabase.removeChannel(updateChannel);
-    };
+    return () => { supabase.removeChannel(updateChannel); };
   }, [currentUser]);
 
-  // ========================================
   // 3. Device Duration Alerts (ทุก 5 นาที)
-  // ========================================
   useEffect(() => {
     if (!currentUser) return;
 
     const checkDeviceAlerts = async () => {
       try {
-        const { data: pendingCases } = await supabase
-          .from('assessments')
-          .select('*')
-          .eq('status', 'Pending');
-
+        const { data: pendingCases } = await supabase.from('assessments').select('*').eq('status', 'Pending');
         if (!pendingCases) return;
 
         const alerts = [];
@@ -135,7 +98,6 @@ export function useNotifications(currentUser) {
           if (detailData.cl_insert_date) {
             const insertDate = new Date(detailData.cl_insert_date);
             const daysSinceInsert = Math.floor((today - insertDate) / (1000 * 60 * 60 * 24));
-            
             if (daysSinceInsert >= 7) {
               alerts.push({
                 id: `device-cl-${assessment.id}`,
@@ -153,7 +115,6 @@ export function useNotifications(currentUser) {
           if (detailData.has_foley && detailData.foley_insert_date) {
             const insertDate = new Date(detailData.foley_insert_date);
             const daysSinceInsert = Math.floor((today - insertDate) / (1000 * 60 * 60 * 24));
-            
             if (daysSinceInsert >= 14) {
               alerts.push({
                 id: `device-foley-${assessment.id}`,
@@ -171,7 +132,6 @@ export function useNotifications(currentUser) {
           if (detailData.has_ett && detailData.ett_insert_date) {
             const insertDate = new Date(detailData.ett_insert_date);
             const daysSinceInsert = Math.floor((today - insertDate) / (1000 * 60 * 60 * 24));
-            
             if (daysSinceInsert >= 7) {
               alerts.push({
                 id: `device-ett-${assessment.id}`,
@@ -191,9 +151,11 @@ export function useNotifications(currentUser) {
           setNotifications(prev => {
             const existingIds = new Set(prev.map(n => n.id));
             const newAlerts = alerts.filter(a => !existingIds.has(a.id));
+            if (newAlerts.length > 0) {
+              setUnreadCount(prev => prev + newAlerts.length);
+            }
             return [...newAlerts, ...prev].slice(0, 50);
           });
-          setUnreadCount(prev => prev + alerts.length);
         }
       } catch (error) {
         console.error('Device alert check error:', error);
@@ -205,22 +167,14 @@ export function useNotifications(currentUser) {
     return () => clearInterval(interval);
   }, [currentUser]);
 
-  // ========================================
-  // 4. Outbreak Warning
-  // ========================================
+  // 4. Outbreak Warning (ทุก 1 ชม.)
   useEffect(() => {
-    if (currentUser?.role !== 'IC_HEAD') return;
+    if (!isIC) return;
 
     const checkOutbreak = async () => {
       try {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        
-        const { data: recentCases } = await supabase
-          .from('assessments')
-          .select('*')
-          .eq('status', 'Confirmed')
-          .gte('created_at', sevenDaysAgo);
-
+        const { data: recentCases } = await supabase.from('assessments').select('*').eq('status', 'Confirmed').gte('created_at', sevenDaysAgo);
         if (!recentCases) return;
 
         const grouped = {};
@@ -243,12 +197,7 @@ export function useNotifications(currentUser) {
             };
 
             setNotifications(prev => {
-              const exists = prev.some(n => 
-                n.type === 'OUTBREAK' && 
-                n.id.startsWith(`outbreak-${type}`) &&
-                Date.now() - new Date(n.timestamp).getTime() < 24 * 60 * 60 * 1000
-              );
-              
+              const exists = prev.some(n => n.type === 'OUTBREAK' && n.id.startsWith(`outbreak-${type}`) && Date.now() - new Date(n.timestamp).getTime() < 24 * 60 * 60 * 1000);
               if (!exists) {
                 setUnreadCount(prev => prev + 1);
                 return [outbreakAlert, ...prev].slice(0, 50);
@@ -257,10 +206,7 @@ export function useNotifications(currentUser) {
             });
 
             playNotificationSound();
-            showBrowserNotification(
-              '🚨 Vanguard IC — Outbreak Warning',
-              `พบการระบาดของ ${type} จำนวน ${cases.length} เคส`
-            );
+            showBrowserNotification('🚨 Vanguard IC — Outbreak Warning', `พบการระบาดของ ${type} จำนวน ${cases.length} เคส`);
           }
         });
       } catch (error) {
@@ -273,9 +219,6 @@ export function useNotifications(currentUser) {
     return () => clearInterval(interval);
   }, [currentUser]);
 
-  // ========================================
-  // Helpers
-  // ========================================
   const markAsRead = useCallback((id) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     setUnreadCount(prev => Math.max(0, prev - 1));
@@ -292,33 +235,21 @@ export function useNotifications(currentUser) {
     setShowPanel(false);
   }, []);
 
-  return {
-    notifications, unreadCount, showPanel, setShowPanel,
-    markAsRead, markAllAsRead, clearAll
-  };
-}
-
-// ========================================
-// Utility Functions
-// ========================================
-function playNotificationSound() {
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (error) {}
+  return { notifications, unreadCount, showPanel, setShowPanel, markAsRead, markAllAsRead, clearAll };
 }
 
 function showBrowserNotification(title, body) {
   if (!('Notification' in window)) return;
+  
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        new Notification(title, { body, icon: '/favicon.ico', tag: 'vanguard-ic' });
+      }
+    });
+    return;
+  }
+  
   if (Notification.permission === 'granted') {
     new Notification(title, { body, icon: '/favicon.ico', tag: 'vanguard-ic' });
   }

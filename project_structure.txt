@@ -1,0 +1,36 @@
+Project Structure: Vanguard IC
+Root: src/
+
+├── App.jsx (Entry Point)
+├── utils/
+│   ├── supabaseClient.js
+│   ├── sessionManager.js
+│   ├── triageLogic.js
+│   ├── formatTimeAgo.js
+│   └── playNotificationSound.js
+├── constants/
+│   └── THEME_MAP.js
+├── hooks/
+│   ├── useAppData.js
+│   ├── useNotifications.js
+│   └── useNurseNotifications.js
+├── data/
+│   └── schemaDB.js
+└── components/
+    ├── shared/
+    │   ├── NotificationBell.jsx
+    │   ├── ErrorMessage.jsx
+    │   ├── AuditModal.jsx
+    │   └── BulkPrintContainer.jsx
+    ├── ic/
+    │   ├── CasesTab.jsx
+    │   ├── DashboardTab.jsx
+    │   ├── UsersTab.jsx
+    │   └── SettingsTab.jsx
+    ├── nurse/
+    │   ├── PatientForm.jsx
+    │   └── VitalsCard.jsx
+    ├── FormEngine.jsx
+    ├── SchemaDesigner.jsx
+    ├── ICCommandCenter.jsx
+    └── WardNursePane.jsx

@@ -1,16 +1,31 @@
-# React + Vite
+# 🛡️ Vanguard IC — ระบบเฝ้าระวังการติดเชื้อในโรงพยาบาล
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ระบบ AI Triage สำหรับประเมินและเฝ้าระวังการติดเชื้อในโรงพยาบาล
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 📋 Requirements
 
-## React Compiler
+- **Node.js** 18+
+- **npm** 9+
+- **Supabase Account** (Free)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🚀 Installation
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Step 1: Setup Supabase
+
+1. สมัครที่ [supabase.com](https://supabase.com)
+2. สร้าง **New Project**
+3. ไปที่ **SQL Editor** → รันไฟล์ `setup.sql`
+4. ไปที่ **Settings → API** → คัดลอก `Project URL` และ `anon public key`
+
+### Step 2: Setup Environment
+
+สร้างไฟล์ `.env` จาก `.env.example`:
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+```

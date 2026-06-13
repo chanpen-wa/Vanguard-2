@@ -3,7 +3,7 @@ import { supabase } from '../utils/supabaseClient';
 import { DEFAULT_CDC_DB } from '../data/schemaDB';
 
 // ==========================================
-// 🧠 Runtime Schema Patcher (Debugged V.2)
+// 🧠 Runtime Schema Patcher
 // ==========================================
 const patchSchemaWithAggregateFields = (schema) => {
   if (!schema || !schema.sections || !schema.rules) {
@@ -26,8 +26,6 @@ const patchSchemaWithAggregateFields = (schema) => {
   };
   
   patched.sections.forEach(section => collectAllCheckboxes(section.fields));
-  
-  console.warn(`📋 All checkbox fields in ${schema.system_id}:`, [...allCheckboxFields]);
   
   const guessFieldsFromPrefix = (fieldName) => {
     const prefixMap = {
@@ -65,14 +63,9 @@ const patchSchemaWithAggregateFields = (schema) => {
       const guessedFields = guessFieldsFromPrefix(node.field);
       
       if (guessedFields.length > 0) {
-        console.warn(`🔧 Patched: ${node.field} → [${guessedFields.join(', ')}]`);
         delete node.field;
         node.fields = guessedFields;
         patchCount++;
-      } else if (node.field && !isNaN(Number(node.field))) {
-        console.warn(`🔢 Number field: ${node.field} — keeping as is`);
-      } else {
-        console.warn(`❌ Cannot resolve: ${node.field}`);
       }
     }
     
@@ -83,8 +76,6 @@ const patchSchemaWithAggregateFields = (schema) => {
   patched.rules?.disease_paths?.forEach(path => {
     if (path.criteria) path.criteria.forEach(patchNode);
   });
-  
-  console.warn(`🔧 PATCH RESULT for ${schema.system_id}: ${patchCount} nodes patched`);
   
   return patched;
 };
@@ -100,7 +91,6 @@ export function useAppData(currentUser) {
   const [systemCategories, setSystemCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // ✅ Viewed Cases
   const [viewedCases, setViewedCases] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('ic_viewed_cases') || '{}');
@@ -122,7 +112,15 @@ export function useAppData(currentUser) {
       ]);
 
       if (wardsRes.data) setWards(wardsRes.data);
-      if (usersRes.data) setSystemUsers(usersRes.data);
+      
+      // ✅ เพิ่ม ward_name ให้ users
+      if (usersRes.data) {
+        const usersWithWard = usersRes.data.map(u => ({
+          ...u,
+          ward_name: wardsRes.data?.find(w => w.id === u.ward_id)?.name || null
+        }));
+        setSystemUsers(usersWithWard);
+      }
       
       if (configRes.data && configRes.data.length > 0) {
         const cloudDb = {};
@@ -130,6 +128,7 @@ export function useAppData(currentUser) {
         const categories = configRes.data.map(item => ({
           id: item.system_id,
           name: item.name,
+          short_name: item.short_name || null,
           sort_order: item.sort_order || 0
         }));
         setSystemCategories(categories);
@@ -137,6 +136,7 @@ export function useAppData(currentUser) {
         configRes.data.forEach(item => { 
           const patched = patchSchemaWithAggregateFields(item);
           patched.sort_order = item.sort_order || 0;
+          patched.short_name = item.short_name || null;
           cloudDb[item.system_id] = patched; 
         });
         
@@ -145,18 +145,13 @@ export function useAppData(currentUser) {
         const defaultCategories = Object.values(DEFAULT_CDC_DB).map((item, index) => ({
           id: item.system_id,
           name: item.name,
+          short_name: item.short_name || null,
           sort_order: index
         }));
         setSystemCategories(defaultCategories);
       }
     } catch (error) {
       console.error("Error fetching global data:", error);
-      const defaultCategories = Object.values(DEFAULT_CDC_DB).map((item, index) => ({
-        id: item.system_id,
-        name: item.name,
-        sort_order: index
-      }));
-      setSystemCategories(defaultCategories);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -168,7 +163,6 @@ export function useAppData(currentUser) {
   const fetchAssessments = useCallback(async () => {
     if (!currentUser) return;
     try {
-      // ✅ Nurse = เรียงตาม updated_at (เห็น IC ตอบกลับ), IC = เรียงตาม created_at (เห็นเคสใหม่)
       const orderColumn = currentUser.role === 'NURSE' ? 'updated_at' : 'created_at';
       
       const { data, error } = await supabase
@@ -189,7 +183,7 @@ export function useAppData(currentUser) {
   }, [currentUser]);
 
   // ==========================================
-  // ✅ Viewed Cases Functions
+  // Viewed Cases Functions
   // ==========================================
   const markCaseAsViewed = useCallback((caseId) => {
     setViewedCases(prev => {
@@ -214,35 +208,27 @@ export function useAppData(currentUser) {
   }, [fetchGlobalData]);
 
   // ==========================================
-  // ✅ Realtime Subscription (v2)
+  // Realtime Subscription
   // ==========================================
   useEffect(() => {
     if (!currentUser) return;
     
     fetchAssessments();
 
-    const channelName = `assessments-realtime-${Date.now()}`;
-    console.warn('🔄 Subscribing to Realtime channel:', channelName);
+    const channelName = `assessments-realtime-${currentUser?.id || 'anon'}`;
 
     const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'assessments' },
-        (payload) => {
-          console.warn('🔄 REALTIME DETECTED:', payload.eventType, payload.new?.id, payload.new?.patient_name);
+        () => {
           fetchAssessments();
         }
       )
-      .subscribe((status) => {
-        console.warn('🔄 Realtime status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.warn('✅ Realtime connected successfully!');
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.warn('🔄 Unsubscribing Realtime channel');
       supabase.removeChannel(channel);
     };
   }, [currentUser, fetchAssessments]);
