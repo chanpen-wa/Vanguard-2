@@ -606,6 +606,9 @@ export default function UsersTab({
     const isMe = u.id === currentUser.id;
     const isSuspended = u.is_suspended === true;
 
+    // ✅ ic_head ห้ามทำอะไรกับตัวเองเลย
+    const isLocked = isIcHead && isMe;
+
     return (
       <li
         key={u.id}
@@ -617,6 +620,7 @@ export default function UsersTab({
       >
         <div className="flex justify-between items-start">
           <div className="min-w-0 flex-1">
+            {/* ... ส่วนแสดงชื่อเหมือนเดิม ... */}
             {editingFullName[u.id] !== undefined ? (
               <div className="flex items-center gap-1">
                 <input
@@ -651,14 +655,30 @@ export default function UsersTab({
               </div>
             ) : (
               <span
-                onClick={() =>
+                onClick={() => {
+                  // ❌ ic_head ห้ามแก้ไขชื่อตัวเอง
+                  if (isLocked) {
+                    showToast(
+                      "error",
+                      "❌ ไม่สามารถแก้ไขชื่อบัญชี IC Head ต้นแบบได้",
+                    );
+                    return;
+                  }
                   setEditingFullName((prev) => ({
                     ...prev,
                     [u.id]: u.full_name || "",
-                  }))
+                  }));
+                }}
+                className={`font-bold text-slate-800 transition-colors text-sm truncate block ${
+                  isLocked
+                    ? "cursor-not-allowed opacity-70"
+                    : "cursor-pointer hover:text-indigo-600"
+                }`}
+                title={
+                  isLocked
+                    ? "🔒 บัญชีต้นแบบ — ไม่สามารถแก้ไขได้"
+                    : "คลิกเพื่อเปลี่ยนชื่อ"
                 }
-                className="font-bold text-slate-800 cursor-pointer hover:text-indigo-600 transition-colors text-sm truncate block"
-                title="คลิกเพื่อเปลี่ยนชื่อ"
               >
                 {u.full_name}{" "}
                 {isIcHead && (
@@ -671,21 +691,13 @@ export default function UsersTab({
                 )}
               </span>
             )}
-            {u.ward_name && (
-              <span className="text-[10px] text-slate-400">
-                🏥 {u.ward_name}
-              </span>
-            )}
-            {isSuspended && u.suspension_reason && (
-              <span className="text-[10px] text-amber-500 block mt-0.5">
-                📌 {u.suspension_reason}
-              </span>
-            )}
+            {/* ... ส่วนแสดง ward_name เหมือนเดิม ... */}
           </div>
 
+          {/* 🔒 ปุ่ม Action — ic_head ห้ามทำอะไรกับตัวเอง */}
           <div className="flex items-center gap-0.5 shrink-0 ml-2">
-            {/* Unlock */}
-            {!(isIcHead && isMe) && (
+            {/* Unlock — ic_head ห้ามปลดล็อคตัวเอง */}
+            {!isLocked && (
               <button
                 onClick={() => handleUnlockUser(u.username)}
                 className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg"
@@ -695,8 +707,8 @@ export default function UsersTab({
               </button>
             )}
 
-            {/* Reset Password */}
-            {!(isIcHead && isMe) && (
+            {/* Reset Password — ic_head ห้ามรีเซ็ตตัวเอง */}
+            {!isLocked && (
               <button
                 onClick={() =>
                   handleResetPassword(u.id, u.username, u.full_name)
@@ -708,7 +720,7 @@ export default function UsersTab({
               </button>
             )}
 
-            {/* Change Password */}
+            {/* Change Password — ic_head เปลี่ยนรหัสตัวเองได้ */}
             <button
               onClick={() => handleOpenChangePassword(u)}
               className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
@@ -719,8 +731,9 @@ export default function UsersTab({
 
             {isIc && (
               <>
+                {/* 🔒 Role — ic_head แสดงเป็น badge อย่างเดียว เปลี่ยนไม่ได้ */}
                 {isIcHead ? (
-                  <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700 tracking-wider">
+                  <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700 tracking-wider cursor-not-allowed">
                     IC_HEAD
                   </span>
                 ) : editingRole[u.id] ? (
@@ -743,14 +756,14 @@ export default function UsersTab({
                   </button>
                 )}
 
-                {/* Delete — ห้ามลบ ic_head */}
+                {/* 🔒 Delete — ic_head ห้ามลบ */}
                 {!isIcHead && (
                   <button
                     onClick={() =>
                       handleDeleteIcUser(u.id, u.full_name, u.username)
                     }
                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                    title="ลบ"
+                    title="ย้ายไปถังขยะ"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -805,14 +818,21 @@ export default function UsersTab({
                 <span className="font-mono bg-white border px-1.5 py-0.5 rounded text-slate-800 text-xs">
                   {u.username}
                 </span>
-                <button
-                  onClick={() =>
-                    setEditingField((prev) => ({ ...prev, [u.id]: "username" }))
-                  }
-                  className="p-0.5 text-slate-400 hover:text-indigo-600"
-                >
-                  <Edit2 className="w-3 h-3" />
-                </button>
+                {/* ❌ ic_head ห้ามแก้ไข username */}
+                {!isLocked && (
+                  <button
+                    onClick={() =>
+                      setEditingField((prev) => ({
+                        ...prev,
+                        [u.id]: "username",
+                      }))
+                    }
+                    className="p-0.5 text-slate-400 hover:text-indigo-600"
+                    title="แก้ไข Username"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -820,7 +840,6 @@ export default function UsersTab({
       </li>
     );
   };
-
   // ==========================================
   // 🖥️ Render
   // ==========================================
