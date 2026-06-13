@@ -11,6 +11,8 @@ import {
   RotateCcw,
   UserCog,
   Key,
+  History,
+  Undo2,
 } from "lucide-react";
 import { supabase } from "../../utils/supabaseClient";
 
@@ -40,6 +42,9 @@ export default function UsersTab({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // 🗑️ Soft Delete: แสดงรายการวอร์ดที่ถูกลบ
+  const [showDeletedWards, setShowDeletedWards] = useState(false);
+
   const checkUsernameDuplicate = async (username, excludeUserId) => {
     if (!username || username.trim() === "") return false;
 
@@ -48,7 +53,6 @@ export default function UsersTab({
       .select("id")
       .eq("username", username.trim());
 
-    // ✅ ใส่ .neq เฉพาะตอนมี excludeUserId (ตอนแก้ไข user เดิม)
     if (excludeUserId) {
       query = query.neq("id", excludeUserId);
     }
@@ -60,11 +64,14 @@ export default function UsersTab({
   const nurseUsers = systemUsers.filter((u) => u.role === "NURSE");
   const icUsers = systemUsers.filter((u) => u.role !== "NURSE");
 
+  // 🗑️ วอร์ดที่ถูกลบ (Soft Delete)
+  const deletedWards = wards.filter((w) => w.is_deleted === true);
+  const activeWards = wards.filter((w) => !w.is_deleted);
+
   // ==========================================
   // 🔓 Unlock
   // ==========================================
   const handleUnlockUser = async (username) => {
-    // ❌ ic_head ห้ามปลดล็อคตัวเอง
     if (
       currentUser.username === "ic_head" &&
       username === currentUser.username
@@ -72,7 +79,6 @@ export default function UsersTab({
       showToast("error", "❌ ไม่สามารถปลดล็อคบัญชี IC Head ต้นแบบได้");
       return;
     }
-    // ❌ ห้ามปลดล็อคตัวเอง
     if (username === currentUser.username) {
       showToast("error", "❌ ไม่สามารถปลดล็อคตัวเองได้");
       return;
@@ -89,7 +95,6 @@ export default function UsersTab({
   // 🔄 Reset Password
   // ==========================================
   const handleResetPassword = async (id, username, fullName) => {
-    // ❌ ic_head ห้ามรีเซ็ตตัวเอง
     if (
       currentUser.username === "ic_head" &&
       username === currentUser.username
@@ -100,7 +105,6 @@ export default function UsersTab({
       );
       return;
     }
-    // ❌ ห้ามรีเซ็ตรหัสตัวเอง
     if (username === currentUser.username) {
       showToast("error", "❌ ไม่สามารถรีเซ็ตรหัสตัวเองได้");
       return;
@@ -154,22 +158,18 @@ export default function UsersTab({
     if (!newRole) return;
     const user = systemUsers.find((u) => u.id === id);
 
-    // ❌ ic_head ห้ามเปลี่ยน role ตัวเอง
     if (currentUser.username === "ic_head" && id === currentUser.id) {
       showToast("error", "❌ ไม่สามารถเปลี่ยน Role ของบัญชี IC Head ต้นแบบได้");
       return;
     }
-    // ❌ ห้ามเปลี่ยน role ของ ic_head
     if (user?.username === "ic_head" && newRole !== "IC_HEAD") {
       showToast("error", "❌ ไม่สามารถเปลี่ยน Role ของบัญชี IC Head ต้นแบบได้");
       return;
     }
-    // ❌ มีได้แค่ 1 IC_HEAD
     if (newRole === "IC_HEAD" && user?.username !== "ic_head") {
       showToast("error", "❌ มีได้แค่ 1 บัญชี IC_HEAD ต้นแบบเท่านั้น");
       return;
     }
-    // ❌ ห้ามลด Role ตัวเองเป็น NURSE
     if (id === currentUser.id && newRole === "NURSE") {
       showToast("error", "❌ ไม่สามารถลด Role ตัวเองเป็น NURSE ได้");
       return;
@@ -257,7 +257,6 @@ export default function UsersTab({
       return;
     }
 
-    // ตรวจสอบรหัสเก่า
     const { data: verifyData, error: verifyError } = await supabase.rpc(
       "verify_user",
       {
@@ -275,7 +274,6 @@ export default function UsersTab({
       return;
     }
 
-    // อัปเดตรหัสใหม่
     const { error: updateError } = await supabase.rpc("update_user_password", {
       p_user_id: changePasswordUser.id,
       p_new_password: newPassword,
@@ -293,13 +291,13 @@ export default function UsersTab({
   };
 
   // ==========================================
-  // 🏥 Wards
+  // 🏥 Wards — ใช้ Soft Delete
   // ==========================================
   const handleAddWard = async () => {
     if (!newWardName) return;
     const { data: wData } = await supabase
       .from("wards")
-      .insert({ name: newWardName })
+      .insert({ name: newWardName, is_deleted: false })
       .select()
       .single();
     if (wData) {
@@ -327,18 +325,142 @@ export default function UsersTab({
     fetchGlobalData();
   };
 
-  const handleDeleteWard = async (id) => {
+  // 🆕 Soft Delete — ไม่ลบจริง แต่ตั้ง is_deleted = true
+  const handleSoftDeleteWard = async (id, wardName) => {
+    const nursesInWard = nurseUsers.filter((u) => u.ward_id === id);
+
     if (
       !window.confirm(
-        "⚠️ ยืนยันการลบหอผู้ป่วย?\n\nการกระทำนี้จะ:\n1. ลบบัญชีพยาบาลทั้งหมดในหอผู้ป่วยนี้\n2. ลบข้อมูลหอผู้ป่วยถาวร\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!",
+        `⚠️ ยืนยันการลบหอผู้ป่วย "${wardName}"?\n\n` +
+          `📌 จำนวนพยาบาลในวอร์ด: ${nursesInWard.length} คน\n\n` +
+          `🔒 การลบจะ:\n` +
+          `1. ซ่อนหอผู้ป่วยจากรายการหลัก\n` +
+          `2. ระงับบัญชีพยาบาลทุกคนในวอร์ดนี้ (ไม่สามารถล็อกอินได้)\n` +
+          `3. เก็บข้อมูลไว้ในถังขยะ (กู้คืนได้)\n\n` +
+          `💡 สามารถกู้คืนได้จาก "🗑️ ถังขยะ" ด้านล่าง`,
       )
     )
       return;
+
     try {
-      await supabase.from("system_users").delete().eq("ward_id", id);
+      // 1. Soft Delete วอร์ด
+      const { error: wardError } = await supabase
+        .from("wards")
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: currentUser.full_name,
+        })
+        .eq("id", id);
+
+      if (wardError) throw wardError;
+
+      // 2. ระงับบัญชีพยาบาล (ไม่ลบ)
+      if (nursesInWard.length > 0) {
+        const { error: userError } = await supabase
+          .from("system_users")
+          .update({
+            is_suspended: true,
+            suspended_at: new Date().toISOString(),
+            suspension_reason: `หอผู้ป่วย "${wardName}" ถูกลบเมื่อ ${new Date().toLocaleString("th-TH")}`,
+          })
+          .eq("ward_id", id);
+
+        if (userError) throw userError;
+      }
+
+      showToast(
+        "success",
+        `✅ ย้าย "${wardName}" ไปถังขยะ (${nursesInWard.length} บัญชีถูกระงับ) — กู้คืนได้จากถังขยะ`,
+      );
+      fetchGlobalData();
+    } catch (error) {
+      showToast("error", "❌ ลบไม่สำเร็จ: " + error.message);
+    }
+  };
+
+  // 🆕 กู้คืนวอร์ดจากถังขยะ
+  const handleRestoreWard = async (id, wardName) => {
+    const nursesInWard = nurseUsers.filter((u) => u.ward_id === id);
+
+    if (
+      !window.confirm(
+        `🔄 กู้คืนหอผู้ป่วย "${wardName}"?\n\n` +
+          `📌 จำนวนพยาบาลที่ถูกระงับ: ${nursesInWard.length} คน\n\n` +
+          `✅ จะกลับมาแสดงในรายการหลัก\n` +
+          `✅ บัญชีพยาบาลจะถูกปลดระงับ`,
+      )
+    )
+      return;
+
+    try {
+      // 1. กู้คืนวอร์ด
+      const { error: wardError } = await supabase
+        .from("wards")
+        .update({
+          is_deleted: false,
+          deleted_at: null,
+          deleted_by: null,
+        })
+        .eq("id", id);
+
+      if (wardError) throw wardError;
+
+      // 2. ปลดระงับบัญชีพยาบาล
+      if (nursesInWard.length > 0) {
+        const { error: userError } = await supabase
+          .from("system_users")
+          .update({
+            is_suspended: false,
+            suspended_at: null,
+            suspension_reason: null,
+          })
+          .eq("ward_id", id);
+
+        if (userError) throw userError;
+      }
+
+      showToast(
+        "success",
+        `🔄 กู้คืน "${wardName}" สำเร็จ (${nursesInWard.length} บัญชีถูกปลดระงับ)`,
+      );
+      fetchGlobalData();
+    } catch (error) {
+      showToast("error", "❌ กู้คืนไม่สำเร็จ: " + error.message);
+    }
+  };
+
+  // 🆕 ลบถาวร (Hard Delete) — ใช้เมื่อแน่ใจแล้ว
+  const handlePermanentDeleteWard = async (id, wardName) => {
+    const nursesInWard = nurseUsers.filter((u) => u.ward_id === id);
+
+    if (
+      !window.confirm(
+        `⚠️⚠️⚠️ ลบถาวร "${wardName}"?\n\n` +
+          `📌 จำนวนพยาบาล: ${nursesInWard.length} คน\n\n` +
+          `🚨 คำเตือน: การกระทำนี้ไม่สามารถย้อนกลับได้!\n` +
+          `- บัญชีพยาบาลทุกคนในวอร์ดจะถูกลบถาวร\n` +
+          `- ข้อมูลหอผู้ป่วยจะถูกลบถาวร\n\n` +
+          `💡 แนะนำ: ใช้ Soft Delete แทน (กู้คืนได้)`,
+      )
+    )
+      return;
+
+    // Double confirm
+    if (!window.confirm(`พิมพ์ชื่อวอร์ดเพื่อยืนยันการลบถาวร:\n\n"${wardName}"`))
+      return;
+
+    try {
+      // 1. ลบบัญชีพยาบาลถาวร
+      if (nursesInWard.length > 0) {
+        await supabase.from("system_users").delete().eq("ward_id", id);
+      }
+
+      // 2. ลบวอร์ดถาวร
       const { error } = await supabase.from("wards").delete().eq("id", id);
       if (error) throw error;
-      showToast("success", "✅ ลบหอผู้ป่วยสำเร็จ");
+
+      showToast("success", `🗑️ ลบ "${wardName}" ถาวรสำเร็จ`);
       fetchGlobalData();
     } catch (error) {
       showToast("error", "❌ ลบไม่สำเร็จ: " + error.message);
@@ -353,7 +475,6 @@ export default function UsersTab({
       showToast("error", "❌ กรุณากรอก Username และชื่อให้ครบ");
       return;
     }
-    // ❌ ห้ามสร้าง ic_head ซ้ำ
     if (newIcUsername === "ic_head") {
       showToast("error", "❌ มีบัญชี IC_HEAD ต้นแบบได้เพียงบัญชีเดียวเท่านั้น");
       return;
@@ -382,7 +503,6 @@ export default function UsersTab({
   };
 
   const handleDeleteIcUser = async (id, fullName, username) => {
-    // ❌ ห้ามลบ ic_head
     if (username === "ic_head") {
       showToast("error", "❌ ไม่สามารถลบบัญชี IC Head ต้นแบบได้");
       return;
@@ -407,11 +527,16 @@ export default function UsersTab({
   const renderUserCard = (u, isIc = false) => {
     const isIcHead = u.username === "ic_head";
     const isMe = u.id === currentUser.id;
+    const isSuspended = u.is_suspended === true;
 
     return (
       <li
         key={u.id}
-        className="p-3 rounded-xl border border-slate-100 bg-white shadow-sm flex flex-col gap-2"
+        className={`p-3 rounded-xl border shadow-sm flex flex-col gap-2 ${
+          isSuspended
+            ? "border-amber-300 bg-amber-50/50"
+            : "border-slate-100 bg-white"
+        }`}
       >
         <div className="flex justify-between items-start">
           <div className="min-w-0 flex-1">
@@ -462,11 +587,21 @@ export default function UsersTab({
                 {isIcHead && (
                   <span className="text-[10px] text-red-500 ml-1">👑</span>
                 )}
+                {isSuspended && (
+                  <span className="text-[10px] text-amber-600 ml-1">
+                    ⚠️ ถูกระงับ
+                  </span>
+                )}
               </span>
             )}
             {u.ward_name && (
               <span className="text-[10px] text-slate-400">
                 🏥 {u.ward_name}
+              </span>
+            )}
+            {isSuspended && u.suspension_reason && (
+              <span className="text-[10px] text-amber-500 block mt-0.5">
+                📌 {u.suspension_reason}
               </span>
             )}
           </div>
@@ -626,7 +761,7 @@ export default function UsersTab({
           </p>
         </div>
         <div className="px-6 space-y-3 overflow-y-auto flex-1 custom-scrollbar pb-2">
-          {wards.map((w) => {
+          {activeWards.map((w) => {
             const nursesInWard = nurseUsers.filter((u) => u.ward_id === w.id);
             return (
               <div
@@ -664,17 +799,22 @@ export default function UsersTab({
                     <>
                       <span className="font-bold text-slate-700 text-sm">
                         🏥 {w.name}
+                        <span className="text-[10px] text-slate-400 ml-1">
+                          ({nursesInWard.length})
+                        </span>
                       </span>
                       <div className="flex gap-0.5">
                         <button
                           onClick={() => setEditingWard(w.id)}
                           className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                          title="แก้ไขชื่อ"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
                         <button
-                          onClick={() => handleDeleteWard(w.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                          onClick={() => handleSoftDeleteWard(w.id, w.name)}
+                          className="p-1 text-slate-400 hover:text-amber-600 rounded"
+                          title="ย้ายไปถังขยะ"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -714,6 +854,77 @@ export default function UsersTab({
             </button>
           </div>
         </div>
+
+        {/* 🗑️ ถังขยะ — แสดงวอร์ดที่ถูกลบ */}
+        {deletedWards.length > 0 && (
+          <div className="border-t-2 border-amber-200 shrink-0">
+            <button
+              onClick={() => setShowDeletedWards(!showDeletedWards)}
+              className="w-full p-3 flex items-center justify-between bg-amber-50 hover:bg-amber-100 transition-colors"
+            >
+              <span className="text-xs font-bold text-amber-700 flex items-center gap-2">
+                <History className="w-3.5 h-3.5" />
+                🗑️ ถังขยะ ({deletedWards.length} วอร์ด)
+              </span>
+              <span className="text-[10px] text-amber-500">
+                {showDeletedWards ? "ซ่อน" : "แสดง"}
+              </span>
+            </button>
+
+            {showDeletedWards && (
+              <div className="p-3 space-y-2 max-h-[200px] overflow-y-auto bg-amber-50/30">
+                {deletedWards.map((w) => {
+                  const nursesInWard = nurseUsers.filter(
+                    (u) => u.ward_id === w.id,
+                  );
+                  return (
+                    <div
+                      key={w.id}
+                      className="flex items-center justify-between p-2.5 bg-white border border-amber-200 rounded-lg"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">
+                          🏥 {w.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          {nursesInWard.length} บัญชีถูกระงับ
+                          {w.deleted_at && (
+                            <>
+                              {" "}
+                              •{" "}
+                              {new Date(w.deleted_at).toLocaleDateString(
+                                "th-TH",
+                              )}
+                            </>
+                          )}
+                          {w.deleted_by && <> • โดย {w.deleted_by}</>}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleRestoreWard(w.id, w.name)}
+                          className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg text-[10px] font-bold hover:bg-emerald-100 flex items-center gap-1"
+                          title="กู้คืน"
+                        >
+                          <Undo2 className="w-3 h-3" /> กู้คืน
+                        </button>
+                        <button
+                          onClick={() =>
+                            handlePermanentDeleteWard(w.id, w.name)
+                          }
+                          className="px-2.5 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold hover:bg-rose-100 flex items-center gap-1"
+                          title="ลบถาวร"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* IC Panel */}
