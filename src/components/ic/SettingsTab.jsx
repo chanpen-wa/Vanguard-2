@@ -9,7 +9,6 @@ import {
   ArrowUp,
   ArrowDown,
   Trash2,
-  History,
   RotateCcw,
   X,
   Archive,
@@ -17,7 +16,6 @@ import {
   ShieldAlert,
   Download,
   Plus,
-  Palette,
 } from "lucide-react";
 import { supabase } from "../../utils/supabaseClient";
 import { DEFAULT_CDC_DB } from "../../data/schemaDB";
@@ -38,11 +36,6 @@ export default function SettingsTab({
   const schemaFileRef = useRef(null);
   const dbFileRef = useRef(null);
 
-  const [versions, setVersions] = useState([]);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [versionName, setVersionName] = useState("");
-  const [versionNotes, setVersionNotes] = useState("");
-
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiveDateFrom, setArchiveDateFrom] = useState("");
   const [archiveDateTo, setArchiveDateTo] = useState("");
@@ -55,13 +48,12 @@ export default function SettingsTab({
   const [hospitalName, setHospitalName] = useState("");
 
   useEffect(() => {
-    if (activeTab === "builder") loadVersions();
     if (activeTab === "data") {
       loadArchiveCount();
       setHasExportedLogs(false);
       loadHospitalName();
     }
-  }, [previewSchema?.system_id, activeTab]);
+  }, [activeTab]);
 
   // ==========================================
   // 🏥 Hospital Name
@@ -84,107 +76,6 @@ export default function SettingsTab({
       .from("system_settings")
       .upsert({ key: "hospital_name", value: hospitalName.trim() });
     showToast("success", "✅ บันทึกชื่อโรงพยาบาลเรียบร้อย");
-  };
-
-  // ==========================================
-  // Version Management
-  // ==========================================
-  const loadVersions = async () => {
-    const currentSystemId = previewSchema?.system_id;
-    if (!currentSystemId) return;
-    const { data } = await supabase
-      .from("schema_versions")
-      .select("*")
-      .eq("system_id", currentSystemId)
-      .order("version_number", { ascending: false });
-    setVersions(data || []);
-  };
-
-  const handleSaveVersion = async () => {
-    const currentSystemId = previewSchema?.system_id;
-    if (!currentSystemId || !versionName.trim()) {
-      showToast("error", "กรุณากรอกชื่อ Version");
-      return;
-    }
-    const { data: latest } = await supabase
-      .from("schema_versions")
-      .select("version_number")
-      .eq("system_id", currentSystemId)
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const newVersion = (latest?.version_number || 0) + 1;
-    await supabase.from("schema_versions").insert({
-      system_id: currentSystemId,
-      name: versionName,
-      rules: previewSchema.rules,
-      sections: previewSchema.sections,
-      sort_order: previewSchema.sort_order || 0,
-      version_number: newVersion,
-      created_by: currentUser.full_name,
-      notes: versionNotes || `Version ${newVersion}`,
-    });
-    showToast("success", `💾 บันทึก "${versionName}" สำเร็จ`);
-    setShowSaveDialog(false);
-    setVersionName("");
-    setVersionNotes("");
-    loadVersions();
-  };
-
-  const handleRestoreVersion = async (version) => {
-    if (
-      !window.confirm(
-        `⚠️ ย้อนกลับเป็น "${version.name}"?\n\nSchema ปัจจุบันจะถูกแทนที่\nกด Publish เพื่อบันทึก`,
-      )
-    )
-      return;
-    setPreviewSchema({
-      system_id: version.system_id,
-      name: version.name,
-      short_name: version.short_name || "",
-      rules: version.rules,
-      sections: version.sections,
-      sort_order: version.sort_order,
-    });
-    setJsonText(
-      JSON.stringify(
-        {
-          system_id: version.system_id,
-          name: version.name,
-          short_name: version.short_name || "",
-          rules: version.rules,
-          sections: version.sections,
-          sort_order: version.sort_order,
-        },
-        null,
-        2,
-      ),
-    );
-    showToast(
-      "success",
-      `🔄 ย้อนกลับเป็น "${version.name}" — กด Publish เพื่อบันทึก`,
-    );
-  };
-
-  const handleDeleteVersion = async (versionId, versionName) => {
-    if (!window.confirm(`⚠️ ลบ "${versionName}" ถาวร?`)) return;
-    await supabase.from("schema_versions").delete().eq("id", versionId);
-    showToast("success", `🗑️ ลบ "${versionName}" สำเร็จ`);
-    loadVersions();
-  };
-
-  const handleResetToDefault = () => {
-    if (!window.confirm("⚠️ รีเซ็ตเป็นค่าเริ่มต้น?")) return;
-    const defaultSchema =
-      DEFAULT_CDC_DB[previewSchema?.system_id] ||
-      Object.values(DEFAULT_CDC_DB).find(
-        (s) => s.system_id === previewSchema?.system_id,
-      );
-    if (defaultSchema) {
-      setPreviewSchema(defaultSchema);
-      setJsonText(JSON.stringify(defaultSchema, null, 2));
-      showToast("success", "🔃 รีเซ็ตเป็นค่าเริ่มต้น");
-    } else showToast("error", "ไม่พบค่าเริ่มต้น");
   };
 
   // ==========================================
@@ -656,7 +547,7 @@ export default function SettingsTab({
   return (
     <div className="rounded-3xl shadow-sm border overflow-hidden flex flex-col h-[800px] bg-white border-slate-200 animate-in fade-in slide-in-from-bottom-2 duration-500">
       {/* ========================================== */}
-      {/* Header Bar — แก้ไขใหม่ ไม่ Overflow */}
+      {/* Header Bar */}
       {/* ========================================== */}
       <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
         <div className="flex items-center gap-4">
@@ -689,11 +580,11 @@ export default function SettingsTab({
           </div>
         </div>
 
-        {/* Right Side — Actions (เฉพาะ Builder Mode) */}
+        {/* Right Side — Actions */}
         <div className="flex gap-2 items-center">
           {activeTab === "builder" && (
             <>
-              {/* กลุ่ม: Import/Export (Icon ล้วน) */}
+              {/* Import/Export */}
               <div className="flex gap-1 border-r border-slate-700 pr-2 mr-1">
                 <button
                   onClick={handleExportAllSchemas}
@@ -717,7 +608,7 @@ export default function SettingsTab({
                 </label>
               </div>
 
-              {/* กลุ่ม: จัดลำดับ (Icon ล้วน) */}
+              {/* จัดลำดับ */}
               <div className="flex gap-1 border-r border-slate-700 pr-2 mr-1">
                 <button
                   onClick={() => handleMoveCategory("up")}
@@ -735,7 +626,7 @@ export default function SettingsTab({
                 </button>
               </div>
 
-              {/* เลือกหมวดหมู่ (จำกัดความกว้าง) */}
+              {/* เลือกหมวดหมู่ */}
               <select
                 value={previewSchema?.system_id || ""}
                 onChange={(e) => {
@@ -765,7 +656,7 @@ export default function SettingsTab({
                 ))}
               </select>
 
-              {/* กลุ่ม: Action หลัก (Icon + Tooltip) */}
+              {/* Action หลัก */}
               <button
                 onClick={() => {
                   const newId = prompt(
@@ -857,68 +748,17 @@ export default function SettingsTab({
       <div className="flex-1 overflow-hidden flex">
         {activeTab === "builder" ? (
           previewSchema ? (
-            <>
-              <div className="w-56 bg-white border-r border-slate-200 flex flex-col z-10 shadow-sm">
-                <div className="p-3 border-b border-slate-100 bg-purple-50/30">
-                  <h4 className="font-extrabold text-xs flex items-center gap-1.5 text-purple-800">
-                    <History className="w-3.5 h-3.5" /> Versions
-                  </h4>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    บันทึก Version สำหรับหมวด{" "}
-                    <strong>{previewSchema.system_id}</strong>
-                  </p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
-                  {versions.map((v) => (
-                    <div
-                      key={v.id}
-                      onClick={() => handleRestoreVersion(v)}
-                      className="w-full text-left p-2.5 rounded-xl border bg-white border-slate-200 hover:border-purple-300 hover:bg-purple-50 text-xs group relative cursor-pointer"
-                    >
-                      <p className="font-bold text-slate-700 pr-4">{v.name}</p>
-                      <p className="text-[10px] text-slate-400">
-                        v{v.version_number} •{" "}
-                        {new Date(v.created_at).toLocaleDateString("th-TH")}
-                      </p>
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteVersion(v.id, v.name);
-                        }}
-                        className="absolute top-2 right-2 p-1 text-slate-400 hover:text-rose-600 rounded opacity-0 group-hover:opacity-100"
-                      >
-                        <X className="w-3 h-3" />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-2 border-t space-y-1.5">
-                  <button
-                    onClick={() => setShowSaveDialog(true)}
-                    className="w-full py-2 bg-purple-50 text-purple-600 border border-purple-200 rounded-lg text-[10px] font-bold hover:bg-purple-100 flex items-center justify-center gap-1"
-                  >
-                    <Save className="w-3 h-3" /> บันทึก Version
-                  </button>
-                  <button
-                    onClick={handleResetToDefault}
-                    className="w-full py-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold hover:bg-rose-100 flex items-center justify-center gap-1"
-                  >
-                    <RotateCcw className="w-3 h-3" /> คืนค่าเริ่มต้น
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <SchemaDesigner
-                  schema={previewSchema}
-                  onChange={(newSchema) => {
-                    setPreviewSchema(newSchema);
-                    setJsonText(JSON.stringify(newSchema, null, 2));
-                  }}
-                />
-              </div>
-            </>
+            <div className="flex-1 overflow-hidden">
+              <SchemaDesigner
+                schema={previewSchema}
+                onChange={(newSchema) => {
+                  setPreviewSchema(newSchema);
+                  setJsonText(JSON.stringify(newSchema, null, 2));
+                }}
+              />
+            </div>
           ) : (
-            <div className="flex-1 bg-slate-50 flex items-center justify-center border-r border-slate-200">
+            <div className="flex-1 bg-slate-50 flex items-center justify-center">
               <div className="text-center text-slate-400">
                 <Box className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                 <p className="text-sm font-bold">
@@ -1189,60 +1029,6 @@ export default function SettingsTab({
           </div>
         )}
       </div>
-
-      {/* ========================================== */}
-      {/* Save Version Dialog */}
-      {/* ========================================== */}
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Save className="w-5 h-5 text-purple-500" /> บันทึก Version ใหม่
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  ชื่อ Version *
-                </label>
-                <input
-                  type="text"
-                  value={versionName}
-                  onChange={(e) => setVersionName(e.target.value)}
-                  placeholder={`เช่น ${previewSchema?.system_id || "ระบบ"} v1`}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  หมายเหตุ
-                </label>
-                <textarea
-                  rows="2"
-                  value={versionNotes}
-                  onChange={(e) => setVersionNotes(e.target.value)}
-                  placeholder="สิ่งที่เปลี่ยนแปลง..."
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400 resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end mt-4">
-              <button
-                onClick={() => setShowSaveDialog(false)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50"
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={handleSaveVersion}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold"
-              >
-                💾 บันทึก
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
