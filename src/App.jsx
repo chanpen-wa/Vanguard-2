@@ -264,8 +264,8 @@ export default function App() {
                   </p>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
                     {currentUser.role === "NURSE"
-                      ? "Ward Nurse"
-                      : currentUser.role}
+                      ? `Ward Nurse - ${wards.find((w) => w.id === currentUser.ward_id)?.name || currentUser.full_name}`
+                      : currentUser.role}{" "}
                   </p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-600 font-bold">
