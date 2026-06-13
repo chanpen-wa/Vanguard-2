@@ -917,17 +917,18 @@ export default function DashboardTab({
                 }}
               />
               <Legend iconType="circle" />
-              <Bar dataKey="count" name="Total" radius={[8, 8, 0, 0]}>
-                {categoryData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Bar>
               <Bar
                 dataKey="HAI"
                 fill={COLORS.HAI}
                 radius={[8, 8, 0, 0]}
                 name="HAI"
               />
+              <Bar
+                dataKey="POA"
+                fill={COLORS.POA}
+                radius={[8, 8, 0, 0]}
+                name="POA"
+              />{" "}
             </BarChart>
           </ResponsiveContainer>
         </div>
