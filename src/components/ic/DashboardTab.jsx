@@ -299,8 +299,8 @@ export default function DashboardTab({
     const dateRange = `${dashDates.start || "ทั้งหมด"} - ${dashDates.end || "ทั้งหมด"}`;
 
     const summaryRows = [
-      [`🏥 ${hospitalName || "โรงพยาบาล"}`],
-      ["รายงานเฝ้าระวังการติดเชื้อในโรงพยาบาล"],
+      [`🏥 ${hospitalName || "โรงพยาบาลมหาวิทยาลัยพะเยา"}`],
+      ["รายงานเฝ้าระวังการติดเชื้อในโรงพยาบาลมหาวิทยาลัยพะเยา"],
       [`วันที่: ${new Date().toLocaleString("th-TH")}`],
       [`ช่วงข้อมูล: ${dateRange}`],
       [`ผู้ส่งออก: ${currentUser?.full_name || "-"}`],
@@ -420,8 +420,8 @@ export default function DashboardTab({
 </head>
 <body>
   <div class="header">
-    <h1>🏥 ${hospitalName || "โรงพยาบาล"}</h1>
-    <p class="subtitle">รายงานเฝ้าระวังการติดเชื้อในโรงพยาบาล</p>
+    <h1>🏥 ${hospitalName || "โรงพยาบาลมหาวิทยาลัยพะเยา"}</h1>
+    <p class="subtitle">รายงานเฝ้าระวังการติดเชื้อในโรงพยาบาลมหาวิทยาลัยพะเยา</p>
     <p class="meta">วันที่ออกรายงาน: ${new Date().toLocaleString("th-TH")} | ช่วงข้อมูล: ${dateRange} | ผู้ส่งออก: ${currentUser?.full_name || "-"}</p>
   </div>
 
@@ -474,7 +474,7 @@ export default function DashboardTab({
   </div>
 
   <div class="footer">
-    <span>${hospitalName || "โรงพยาบาล"}</span>
+    <span>${hospitalName || "โรงพยาบาลมหาววิทยาลัยพะเยา"}</span>
     <span>Vanguard IC — Epidemiology Surveillance System</span>
     <span>${new Date().toLocaleString("th-TH")}</span>
   </div>
